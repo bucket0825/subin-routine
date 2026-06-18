@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#f6efe6" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="수빈 루틴" />
+<title>수빈 루틴</title>
+<style>
+  :root {
+    --bg: #f6efe6;
+    --card: #ffffff;
+    --ink: #42382f;
+    --ink-soft: #8c8378;
+    --line: #ece3d6;
+    --shadow: 0 2px 10px rgba(80,66,48,.07);
+    --radius: 16px;
+    --개인: #9b7fd4; --개인-bg: #f0ebfa;
+    --취미: #d4605a; --취미-bg: #faeaea;
+    --명진: #5a9e6f; --명진-bg: #e8f5ec;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; }
+  html, body {
+    background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    font-size: 16px; line-height: 1.55; -webkit-font-smoothing: antialiased;
+  }
+  body { padding-bottom: 80px; }
+
+  #login-screen {
+    position: fixed; inset: 0; background: var(--bg);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 24px; z-index: 9999;
+  }
+  .login-logo { font-size: 48px; }
+  .login-title { font-size: 24px; font-weight: 700; letter-spacing: -.3px; }
+  .login-sub { font-size: 14px; color: var(--ink-soft); }
+  .btn-google {
+    display: flex; align-items: center; gap: 10px;
+    background: #fff; border: 1.5px solid var(--line);
+    border-radius: 50px; padding: 13px 24px;
+    font-size: 15px; font-weight: 600; cursor: pointer;
+    box-shadow: var(--shadow); transition: transform .1s;
+  }
+  .btn-google:active { transform: scale(.97); }
+  .btn-google svg { width: 20px; height: 20px; }
+
+  #loading-screen {
+    position: fixed; inset: 0; background: var(--bg);
+    display: flex; align-items: center; justify-content: center; z-index: 9998;
+  }
+  .spinner {
+    width: 36px; height: 36px; border: 3px solid var(--line);
+    border-top-color: var(--ink); border-radius: 50%;
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .topbar {
+    background: var(--bg); border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; z-index: 100;
+    padding: 14px 16px 0; max-width: 520px; margin: 0 auto; width: 100%;
+  }
+  .topbar-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .topbar-title { font-size: 19px; font-weight: 700; letter-spacing: -.2px; }
+  .topbar-title span { font-size: 13px; font-weight: 400; color: var(--ink-soft); margin-left: 6px; }
+  .topbar-user { font-size: 12px; color: var(--ink-soft); cursor: pointer; padding: 4px 8px; border-radius: 20px; border: 1px solid var(--line); }
+
+  .tab-bar { display: flex; }
+  .tab-btn {
+    flex: 1; background: none; border: none;
+    padding: 10px 4px 12px; font: inherit; font-size: 14px; font-weight: 600;
+    color: var(--ink-soft); cursor: pointer; position: relative; transition: color .15s;
+  }
+  .tab-btn::after {
+    content: ''; position: absolute; bottom: 0; left: 16%; right: 16%;
+    height: 2.5px; border-radius: 2px; background: var(--ink);
+    opacity: 0; transition: opacity .15s;
+  }
+  .tab-btn.active { color: var(--ink); }
+  .tab-btn.active::after { opacity: 1; }
+
+  .coach-tab-bar { display: flex; }
+  .coach-tab-btn {
+    flex: 1; background: none; border: none; border-bottom: 2px solid var(--line);
+    padding: 10px 4px 12px; font: inherit; font-size: 14px; font-weight: 600;
+    color: var(--ink-soft); cursor: pointer; transition: all .15s;
+  }
+  .coach-tab-btn.active { color: var(--ink); border-bottom-color: var(--ink); }
+
+  .filter-row {
+    display: flex; gap: 6px; padding: 12px 16px 0;
+    max-width: 520px; margin: 0 auto;
+  }
+  .filter-btn {
+    padding: 5px 14px; border-radius: 20px; border: 1.5px solid var(--line);
+    background: var(--card); font: inherit; font-size: 13px; font-weight: 600;
+    color: var(--ink-soft); cursor: pointer; transition: all .15s;
+  }
+  .filter-btn.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+  .content { max-width: 520px; margin: 0 auto; padding: 16px 16px 0; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+  .coach-panel { display: none; }
+  .coach-panel.active { display: block; }
+
+  .section-header {
+    font-size: 12px; font-weight: 700; color: var(--ink-soft);
+    letter-spacing: .5px; margin: 20px 0 8px; padding: 0 2px;
+  }
+
+  .goal-card {
+    background: var(--card); border-radius: var(--radius);
+    box-shadow: var(--shadow); margin-bottom: 10px; padding: 14px 16px;
+    transition: opacity .2s;
+  }
+  .goal-card.done { opacity: .55; }
+  .goal-header { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
+  .goal-tag {
+    font-size: 11px; font-weight: 700; padding: 2px 8px;
+    border-radius: 20px; white-space: nowrap; flex-shrink: 0; margin-top: 2px;
+  }
+  .tag-개인 { background: var(--개인-bg); color: var(--개인); }
+  .tag-취미 { background: var(--취미-bg); color: var(--취미); }
+  .tag-명진 { background: var(--명진-bg); color: var(--명진); }
+  .goal-title { font-size: 15px; font-weight: 600; flex: 1; }
+
+  .progress-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .progress-dots { display: flex; gap: 4px; flex: 1; flex-wrap: wrap; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--line); transition: background .2s; }
+  .dot.filled { background: var(--ink); }
+  .progress-text { font-size: 12px; color: var(--ink-soft); white-space: nowrap; }
+
+  .btn-check {
+    width: 100%; padding: 10px; border-radius: 10px;
+    background: var(--ink); color: #fff;
+    border: none; font: inherit; font-size: 14px; font-weight: 600;
+    cursor: pointer; transition: opacity .15s;
+  }
+  .btn-check:active { opacity: .8; }
+  .btn-check.secondary { background: var(--line); color: var(--ink); }
+  .btn-check.danger { background: #faeaea; color: #d4605a; }
+  .btn-check.success { background: #e8f5ec; color: #5a9e6f; }
+
+  .btn-release {
+    width: 100%; padding: 14px; border-radius: var(--radius);
+    background: linear-gradient(135deg, #5a9e6f, #3d8a57); color: #fff;
+    border: none; font: inherit; font-size: 16px; font-weight: 700;
+    cursor: pointer; margin-top: 20px; letter-spacing: -.2px;
+    box-shadow: 0 4px 16px rgba(90,158,111,.3);
+  }
+
+  .calendar-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .calendar-nav { background: none; border: none; font-size: 20px; cursor: pointer; padding: 4px 8px; }
+  .calendar-month { font-size: 17px; font-weight: 700; }
+  .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .cal-day-label { text-align: center; font-size: 11px; font-weight: 600; color: var(--ink-soft); padding: 4px 0; }
+  .cal-cell {
+    aspect-ratio: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: flex-start;
+    padding-top: 4px; border-radius: 10px; cursor: pointer; transition: background .15s;
+  }
+  .cal-cell:hover { background: var(--line); }
+  .cal-cell.today { background: var(--ink); color: #fff; }
+  .cal-cell.today .cal-date { color: #fff; }
+  .cal-date { font-size: 12px; font-weight: 600; line-height: 1; }
+  .cal-dots { display: flex; gap: 2px; margin-top: 3px; flex-wrap: wrap; justify-content: center; }
+  .cal-dot { width: 5px; height: 5px; border-radius: 50%; }
+  .cal-dot.green { background: #5a9e6f; }
+  .cal-dot.orange { background: #e89a4a; }
+  .cal-dot.gray { background: #ccc; }
+  .cal-cell.empty { cursor: default; }
+
+  .settings-section { margin-bottom: 24px; }
+  .settings-title { font-size: 13px; font-weight: 700; color: var(--ink-soft); margin-bottom: 10px; }
+  .settings-item {
+    background: var(--card); border-radius: var(--radius);
+    padding: 14px 16px; margin-bottom: 8px;
+    display: flex; align-items: center; justify-content: space-between;
+    box-shadow: var(--shadow);
+  }
+  .settings-label { font-size: 15px; font-weight: 600; }
+  .settings-value { font-size: 13px; color: var(--ink-soft); }
+
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.4);
+    display: flex; align-items: flex-end; justify-content: center;
+    z-index: 500; opacity: 0; pointer-events: none; transition: opacity .2s;
+  }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+  .modal-sheet {
+    background: var(--card); border-radius: 20px 20px 0 0;
+    width: 100%; max-width: 520px; padding: 20px 20px 36px;
+    transform: translateY(100%); transition: transform .25s cubic-bezier(.32,1,.5,1);
+    max-height: 85vh; overflow-y: auto;
+  }
+  .modal-overlay.open .modal-sheet { transform: translateY(0); }
+  .modal-handle { width: 40px; height: 4px; background: var(--line); border-radius: 2px; margin: 0 auto 20px; }
+  .modal-title { font-size: 18px; font-weight: 700; margin-bottom: 20px; }
+  .form-group { margin-bottom: 16px; }
+  .form-label { font-size: 13px; font-weight: 700; color: var(--ink-soft); margin-bottom: 6px; display: block; }
+  .form-input {
+    width: 100%; padding: 12px 14px; border-radius: 10px;
+    border: 1.5px solid var(--line); background: var(--bg);
+    font: inherit; font-size: 15px; color: var(--ink); outline: none; transition: border-color .15s;
+  }
+  .form-input:focus { border-color: var(--ink); }
+  .form-select {
+    width: 100%; padding: 12px 14px; border-radius: 10px;
+    border: 1.5px solid var(--line); background: var(--bg);
+    font: inherit; font-size: 15px; color: var(--ink); outline: none;
+    appearance: none; cursor: pointer;
+  }
+  .tag-select-row { display: flex; gap: 8px; }
+  .tag-select-btn {
+    flex: 1; padding: 10px; border-radius: 10px;
+    border: 1.5px solid var(--line); background: var(--card);
+    font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+    color: var(--ink-soft); transition: all .15s;
+  }
+  .tag-select-btn.active-개인 { background: var(--개인-bg); color: var(--개인); border-color: var(--개인); }
+  .tag-select-btn.active-취미 { background: var(--취미-bg); color: var(--취미); border-color: var(--취미); }
+  .tag-select-btn.active-명진 { background: var(--명진-bg); color: var(--명진); border-color: var(--명진); }
+  .btn-primary {
+    width: 100%; padding: 14px; border-radius: var(--radius);
+    background: var(--ink); color: #fff;
+    border: none; font: inherit; font-size: 16px; font-weight: 700;
+    cursor: pointer; margin-top: 8px;
+  }
+
+  .fab {
+    position: fixed; bottom: 92px; right: calc(50% - 244px);
+    width: 52px; height: 52px; border-radius: 50%;
+    background: var(--ink); color: #fff;
+    border: none; font-size: 24px; cursor: pointer;
+    box-shadow: 0 4px 16px rgba(66,56,47,.25); z-index: 200;
+    display: flex; align-items: center; justify-content: center; transition: transform .15s;
+  }
+  .fab:active { transform: scale(.9); }
+  @media (max-width: 520px) { .fab { right: 20px; } }
+
+  .bottom-nav {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: var(--card); border-top: 1px solid var(--line);
+    display: flex; z-index: 300; max-width: 520px; margin: 0 auto;
+  }
+  .nav-btn {
+    flex: 1; background: none; border: none;
+    padding: 10px 4px 14px; font: inherit; font-size: 11px; font-weight: 600;
+    color: var(--ink-soft); cursor: pointer; text-align: center;
+    display: flex; flex-direction: column; align-items: center; gap: 3px; transition: color .15s;
+  }
+  .nav-btn .nav-icon { font-size: 22px; }
+  .nav-btn.active { color: var(--ink); }
+
+  .stat-card {
+    background: var(--card); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 16px; margin-bottom: 12px;
+  }
+  .stat-label { font-size: 12px; font-weight: 700; color: var(--ink-soft); margin-bottom: 4px; }
+  .stat-value { font-size: 28px; font-weight: 800; }
+  .stat-row { display: flex; gap: 10px; margin-bottom: 12px; }
+  .stat-row .stat-card { flex: 1; }
+  .progress-bar-wrap { background: var(--line); border-radius: 4px; height: 8px; overflow: hidden; margin-top: 6px; }
+  .progress-bar-fill { height: 100%; background: var(--ink); border-radius: 4px; transition: width .4s; }
+
+  .release-notif {
+    background: #e8f5ec; border-radius: var(--radius);
+    border: 1.5px solid #5a9e6f; padding: 16px;
+    margin-bottom: 16px; display: flex; align-items: center; gap: 12px;
+  }
+  .release-notif-icon { font-size: 28px; }
+  .release-notif-text { flex: 1; }
+  .release-notif-title { font-size: 15px; font-weight: 700; color: #3d8a57; }
+  .release-notif-sub { font-size: 13px; color: var(--ink-soft); }
+  .btn-release-confirm {
+    padding: 8px 16px; border-radius: 20px;
+    background: #5a9e6f; color: #fff;
+    border: none; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+  }
+
+  .day-popup { padding: 0 0 8px; }
+  .day-goal-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 0; border-bottom: 1px solid var(--line);
+  }
+  .day-goal-row:last-child { border-bottom: none; }
+  .day-goal-status { font-size: 18px; }
+  .day-goal-title { font-size: 14px; font-weight: 600; flex: 1; }
+  .day-goal-count { font-size: 12px; color: var(--ink-soft); }
+
+  #toast {
+    position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
+    background: rgba(66,56,47,.9); color: #fff;
+    padding: 10px 20px; border-radius: 20px; font-size: 14px; font-weight: 600;
+    z-index: 9999; opacity: 0; transition: opacity .2s; pointer-events: none; white-space: nowrap;
+  }
+  #toast.show { opacity: 1; }
+
+  .empty-state { text-align: center; padding: 48px 16px; color: var(--ink-soft); }
+  .empty-state-icon { font-size: 40px; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+
+<div id="loading-screen"><div class="spinner"></div></div>
+
+<div id="login-screen" style="display:none">
+  <div class="login-logo">🌿</div>
+  <div class="login-title">수빈 루틴</div>
+  <div class="login-sub">Google 계정으로 시작하세요</div>
+  <button class="btn-google" onclick="signInWithGoogle()">
+    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+    </svg>
+    Google로 로그인
+  </button>
+</div>
+
+<!-- 수빈 앱 -->
+<div id="subin-app" style="display:none">
+  <div class="topbar">
+    <div class="topbar-row">
+      <div class="topbar-title">수빈 루틴 <span id="today-date"></span></div>
+      <button class="topbar-user" onclick="showUserMenu()">🌿 수빈</button>
+    </div>
+    <div class="tab-bar">
+      <button class="tab-btn active" onclick="switchTab('today')">오늘</button>
+      <button class="tab-btn" onclick="switchTab('calendar')">캘린더</button>
+      <button class="tab-btn" onclick="switchTab('settings')">설정</button>
+    </div>
+  </div>
+
+  <div class="filter-row" id="filter-row">
+    <button class="filter-btn active" onclick="switchFilter('daily')">오늘</button>
+    <button class="filter-btn" onclick="switchFilter('weekly')">이번 주</button>
+    <button class="filter-btn" onclick="switchFilter('monthly')">이번 달</button>
+    <button class="filter-btn" onclick="switchFilter('once')">단발</button>
+  </div>
+
+  <div class="content">
+    <div class="tab-panel active" id="panel-today">
+      <div id="pinned-section"></div>
+      <div id="goals-list"></div>
+      <div id="release-btn-wrap"></div>
+    </div>
+    <div class="tab-panel" id="panel-calendar">
+      <div class="calendar-header">
+        <button class="calendar-nav" onclick="prevMonth()">‹</button>
+        <div class="calendar-month" id="cal-month-label"></div>
+        <button class="calendar-nav" onclick="nextMonth()">›</button>
+      </div>
+      <div class="calendar-grid" id="cal-day-labels"></div>
+      <div class="calendar-grid" id="cal-grid"></div>
+    </div>
+    <div class="tab-panel" id="panel-settings">
+      <div class="settings-section">
+        <div class="settings-title">계정</div>
+        <div class="settings-item">
+          <span class="settings-label">로그인 계정</span>
+          <span class="settings-value" id="settings-email">-</span>
+        </div>
+        <div class="settings-item" onclick="signOut()" style="cursor:pointer">
+          <span class="settings-label">로그아웃</span>
+          <span class="settings-value">→</span>
+        </div>
+      </div>
+      <div class="settings-section">
+        <div class="settings-title">데이터</div>
+        <div class="settings-item" onclick="exportData()" style="cursor:pointer">
+          <span class="settings-label">데이터 내보내기</span>
+          <span class="settings-value">→</span>
+        </div>
+        <div class="settings-item" onclick="migrateLocalData()" style="cursor:pointer">
+          <span class="settings-label">기존 데이터 가져오기</span>
+          <span class="settings-value">로컬 → Firebase</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <button class="fab" onclick="openAddGoal()" id="fab-btn">+</button>
+
+  <nav class="bottom-nav">
+    <button class="nav-btn active" onclick="switchTab('today')"><span class="nav-icon">☀️</span>오늘</button>
+    <button class="nav-btn" onclick="switchTab('calendar')"><span class="nav-icon">📅</span>캘린더</button>
+    <button class="nav-btn" onclick="switchTab('settings')"><span class="nav-icon">⚙️</span>설정</button>
+  </nav>
+</div>
+
+<!-- 명진(코치) 앱 -->
+<div id="coach-app" style="display:none">
+  <div class="topbar">
+    <div class="topbar-row">
+      <div class="topbar-title">수빈 루틴 <span>코치 뷰</span></div>
+      <button class="topbar-user" onclick="showUserMenu()">🌿 명진</button>
+    </div>
+    <div class="coach-tab-bar">
+      <button class="coach-tab-btn active" onclick="switchCoachTab('status')">수빈 현황</button>
+      <button class="coach-tab-btn" onclick="switchCoachTab('goals')">목표 관리</button>
+      <button class="coach-tab-btn" onclick="switchCoachTab('calendar')">캘린더</button>
+    </div>
+  </div>
+  <div class="content">
+    <div class="coach-panel active" id="coach-status">
+      <div id="release-notif-area"></div>
+      <div class="stat-row">
+        <div class="stat-card"><div class="stat-label">오늘 달성률</div><div class="stat-value" id="coach-rate">-</div></div>
+        <div class="stat-card"><div class="stat-label">완료 목표</div><div class="stat-value" id="coach-done">-</div></div>
+      </div>
+      <div id="coach-goals-status"></div>
+    </div>
+    <div class="coach-panel" id="coach-goals">
+      <button class="btn-check" style="margin-bottom:16px" onclick="openAddGoal()">+ 목표 추가 (수빈에게)</button>
+      <div id="coach-goals-list"></div>
+    </div>
+    <div class="coach-panel" id="coach-calendar">
+      <div class="calendar-header">
+        <button class="calendar-nav" onclick="prevMonth()">‹</button>
+        <div class="calendar-month" id="coach-cal-month-label"></div>
+        <button class="calendar-nav" onclick="nextMonth()">›</button>
+      </div>
+      <div class="calendar-grid" id="coach-cal-day-labels"></div>
+      <div class="calendar-grid" id="coach-cal-grid"></div>
+    </div>
+  </div>
+  <nav class="bottom-nav">
+    <button class="nav-btn active" onclick="switchCoachTab('status')"><span class="nav-icon">📊</span>현황</button>
+    <button class="nav-btn" onclick="switchCoachTab('goals')"><span class="nav-icon">🎯</span>목표</button>
+    <button class="nav-btn" onclick="switchCoachTab('calendar')"><span class="nav-icon">📅</span>캘린더</button>
+  </nav>
+</div>
+
+<!-- 목표 추가/수정 모달 -->
+<div class="modal-overlay" id="modal-goal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="modal-goal-title">목표 추가</div>
+    <div class="form-group">
+      <label class="form-label">목표 이름</label>
+      <input type="text" class="form-input" id="input-title" placeholder="목표를 입력하세요" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">카테고리</label>
+      <div class="tag-select-row">
+        <button class="tag-select-btn" id="tag-개인" onclick="selectTag('개인')">개인</button>
+        <button class="tag-select-btn" id="tag-취미" onclick="selectTag('취미')">취미</button>
+        <button class="tag-select-btn" id="tag-명진" onclick="selectTag('명진')">명진</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">주기</label>
+      <select class="form-select" id="input-type" onchange="onTypeChange()">
+        <option value="daily">매일 (일간)</option>
+        <option value="weekly">이번 주 (주간)</option>
+        <option value="monthly">이번 달 (월간)</option>
+        <option value="once">단발</option>
+      </select>
+    </div>
+    <div class="form-group" id="count-group">
+      <label class="form-label">목표 횟수</label>
+      <input type="number" class="form-input" id="input-count" value="1" min="1" max="99" />
+    </div>
+    <div class="form-group" id="unit-group">
+      <label class="form-label">단위</label>
+      <input type="text" class="form-input" id="input-unit" placeholder="번, 잔, 분 등" value="번" />
+    </div>
+    <button class="btn-primary" onclick="saveGoal()">저장</button>
+    <button class="btn-check secondary" style="margin-top:8px" onclick="closeModal('modal-goal')">취소</button>
+    <button class="btn-check danger" style="margin-top:8px;display:none" id="btn-delete-goal" onclick="deleteGoal()">목표 삭제</button>
+  </div>
+</div>
+
+<!-- 날짜 팝업 모달 -->
+<div class="modal-overlay" id="modal-day">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="modal-day-title">날짜 현황</div>
+    <div class="day-popup" id="day-popup-content"></div>
+    <button class="btn-check secondary" style="margin-top:12px" onclick="closeModal('modal-day')">닫기</button>
+  </div>
+</div>
+
+<!-- 사용자 메뉴 모달 -->
+<div class="modal-overlay" id="modal-user">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">계정 메뉴</div>
+    <div id="user-menu-content"></div>
+    <button class="btn-check secondary" style="margin-top:12px" onclick="closeModal('modal-user')">닫기</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+  import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc,
+    onSnapshot, query, where, orderBy, addDoc, updateDoc, serverTimestamp }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBfyRE7CNENjgSfe25xHAdr87gOllpYtvM",
+    authDomain: "subin-routine.firebaseapp.com",
+    projectId: "subin-routine",
+    storageBucket: "subin-routine.firebasestorage.app",
+    messagingSenderId: "102755018689",
+    appId: "1:102755018689:web:2927e3b73fb5391db17140"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+  const provider = new GoogleAuthProvider();
+
+  let currentUser = null, userRole = null, subinUid = null, coachUid = null;
+  let goals = [], logs = {}, notifications = [];
+  let activeFilter = 'daily', activeTab = 'today', activeCoachTab = 'status';
+  let calYear, calMonth, editingGoalId = null, selectedTag = '개인';
+  let unsubGoals, unsubLogs, unsubNotifs;
+
+  const TODAY = new Date();
+  const TODAY_STR = fmt(TODAY);
+
+  function fmt(d) {
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  function weekStart(d) {
+    const dt = new Date(d); const day = dt.getDay();
+    dt.setDate(dt.getDate() + (day === 0 ? -6 : 1 - day));
+    return fmt(dt);
+  }
+  function monthStart(d) {
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;
+  }
+  function formatDateKo(d) {
+    return `${d.getMonth()+1}월 ${d.getDate()}일 (${'일월화수목금토'[d.getDay()]})`;
+  }
+
+  // 전역 함수 노출
+  window.signInWithGoogle = async () => {
+    try { await signInWithPopup(auth, provider); }
+    catch(e) { showToast('로그인 실패: ' + e.message); }
+  };
+  window.signOut = async () => {
+    [unsubGoals, unsubLogs, unsubNotifs].forEach(u => u?.());
+    await fbSignOut(auth);
+  };
+  window.switchTab = (tab) => {
+    activeTab = tab;
+    const labels = {today:'오늘', calendar:'캘린더', settings:'설정'};
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.textContent.trim() === labels[tab]));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('panel-'+tab)?.classList.add('active');
+    document.querySelectorAll('#subin-app .nav-btn').forEach((b,i) => b.classList.toggle('active', ['today','calendar','settings'][i]===tab));
+    document.getElementById('filter-row').style.display = tab==='today' ? '' : 'none';
+    document.getElementById('fab-btn').style.display = tab==='today' ? '' : 'none';
+    if(tab==='calendar') renderCalendar();
+  };
+  window.switchCoachTab = (tab) => {
+    activeCoachTab = tab;
+    document.querySelectorAll('.coach-tab-btn').forEach((b,i) => b.classList.toggle('active', ['status','goals','calendar'][i]===tab));
+    document.querySelectorAll('.coach-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('coach-'+tab)?.classList.add('active');
+    document.querySelectorAll('#coach-app .nav-btn').forEach((b,i) => b.classList.toggle('active', ['status','goals','calendar'][i]===tab));
+    if(tab==='calendar') renderCalendar();
+    if(tab==='goals') renderCoachGoals();
+    if(tab==='status') renderCoachStatus();
+  };
+  window.switchFilter = (f) => {
+    activeFilter = f;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b.getAttribute('onclick').includes(`'${f}'`)));
+    renderGoals();
+  };
+  window.prevMonth = () => { calMonth--; if(calMonth<0){calMonth=11;calYear--;} renderCalendar(); };
+  window.nextMonth = () => { calMonth++; if(calMonth>11){calMonth=0;calYear++;} renderCalendar(); };
+  window.openAddGoal = () => {
+    editingGoalId = null;
+    document.getElementById('modal-goal-title').textContent = '목표 추가';
+    document.getElementById('input-title').value = '';
+    document.getElementById('input-type').value = 'daily';
+    document.getElementById('input-count').value = '1';
+    document.getElementById('input-unit').value = '번';
+    document.getElementById('btn-delete-goal').style.display = 'none';
+    selectTag('개인'); onTypeChange(); openModal('modal-goal');
+  };
+  window.selectTag = (tag) => {
+    selectedTag = tag;
+    ['개인','취미','명진'].forEach(t => {
+      document.getElementById('tag-'+t).className = 'tag-select-btn' + (t===tag ? ' active-'+t : '');
+    });
+  };
+  window.onTypeChange = () => {
+    const t = document.getElementById('input-type').value;
+    document.getElementById('count-group').style.display = t==='once' ? 'none' : '';
+    document.getElementById('unit-group').style.display = t==='once' ? 'none' : '';
+  };
+  window.saveGoal = async () => {
+    const title = document.getElementById('input-title').value.trim();
+    if(!title) { showToast('목표 이름을 입력해 주세요'); return; }
+    const type = document.getElementById('input-type').value;
+    const targetCount = type==='once' ? 1 : parseInt(document.getElementById('input-count').value)||1;
+    const unit = type==='once' ? '' : (document.getElementById('input-unit').value.trim()||'번');
+    const data = { uid: subinUid, title, category: selectedTag, type, targetCount, unit,
+      assignedBy: (userRole==='coach') ? 'coach' : 'self',
+      startDate: TODAY_STR, endDate: null, reflection: '', aiSuggest: '', updatedAt: serverTimestamp() };
+    try {
+      if(editingGoalId) {
+        await updateDoc(doc(db,'goals',editingGoalId), data);
+      } else {
+        data.priority = goals.length; data.createdAt = serverTimestamp();
+        await addDoc(collection(db,'goals'), data);
+      }
+      closeModal('modal-goal');
+      showToast(editingGoalId ? '수정됐어요' : '목표가 추가됐어요 🌿');
+    } catch(e) { showToast('오류: '+e.message); }
+  };
+  window.deleteGoal = async () => {
+    if(!editingGoalId || !confirm('이 목표를 삭제할까요?')) return;
+    await deleteDoc(doc(db,'goals',editingGoalId));
+    closeModal('modal-goal'); showToast('삭제됐어요');
+  };
+  window.showUserMenu = () => {
+    document.getElementById('user-menu-content').innerHTML = `
+      <div class="settings-item"><span class="settings-label">계정</span><span class="settings-value">${currentUser?.email||''}</span></div>
+      <button class="btn-check danger" style="margin-top:12px" onclick="signOut();closeModal('modal-user')">로그아웃</button>`;
+    openModal('modal-user');
+  };
+  window.exportData = () => {
+    const blob = new Blob([JSON.stringify({goals, logs, exportedAt: new Date().toISOString()},null,2)],{type:'application/json'});
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `수빈루틴_백업_${TODAY_STR}.json`; a.click();
+  };
+  window.migrateLocalData = async () => {
+    const raw = localStorage.getItem('subin-goals') || localStorage.getItem('subin_routine_v2');
+    if(!raw) { showToast('가져올 기존 데이터가 없어요'); return; }
+    try {
+      const old = JSON.parse(raw);
+      const list = Array.isArray(old) ? old : (old.goals || []);
+      if(!confirm(`기존 목표 ${list.length}개를 Firebase로 가져올까요?`)) return;
+      for(const g of list) {
+        await addDoc(collection(db,'goals'), {
+          uid: subinUid, title: g.title||g.name||'', category: g.category||'개인',
+          type: 'once', targetCount: 1, unit: '', priority: g.order||0,
+          assignedBy: 'self', startDate: g.startDate||TODAY_STR,
+          endDate: g.endDate||null, reflection: g.reflection||'',
+          aiSuggest: '', createdAt: serverTimestamp(), updatedAt: serverTimestamp()
+        });
+      }
+      showToast(`${list.length}개 가져오기 완료!`);
+    } catch(e) { showToast('오류: '+e.message); }
+  };
+  window.requestRelease = async () => {
+    if(!coachUid) { showToast('코치가 연결되지 않았어요'); return; }
+    await addDoc(collection(db,'notifications'), {
+      type: 'release_request', fromUid: subinUid, toUid: coachUid,
+      message: `수빈이 오늘 목표를 모두 완료했어요! (${formatDateKo(TODAY)})`,
+      read: false, createdAt: serverTimestamp()
+    });
+    showToast('명진에게 해제 요청을 보냈어요 📩');
+  };
+  window.confirmRelease = async (notifId) => {
+    await updateDoc(doc(db,'notifications',notifId), { read: true });
+    showToast('해제 완료 처리됐어요 ✓');
+  };
+  window.openEditGoalCoach = (id) => { const g = goals.find(x=>x.id===id); if(g) openEditGoal(g); };
+  window.showDayDetail = (dateStr) => {
+    document.getElementById('modal-day-title').textContent = formatDateKo(new Date(dateStr));
+    const dailyGoals = goals.filter(g => g.type==='daily');
+    document.getElementById('day-popup-content').innerHTML = !dailyGoals.length
+      ? '<div style="color:var(--ink-soft);text-align:center;padding:20px">목표 없음</div>'
+      : dailyGoals.map(g => {
+          const count = logs[g.id+'_'+dateStr]?.count||0;
+          return `<div class="day-goal-row">
+            <div class="day-goal-status">${count>=g.targetCount?'✅':count>0?'🟡':'⬜'}</div>
+            <div class="day-goal-title">${g.title}</div>
+            <div class="day-goal-count">${count}/${g.targetCount}${g.unit}</div>
+          </div>`;
+        }).join('');
+    openModal('modal-day');
+  };
+  window.openModal = (id) => document.getElementById(id).classList.add('open');
+  window.closeModal = (id) => document.getElementById(id).classList.remove('open');
+
+  document.querySelectorAll('.modal-overlay').forEach(el => {
+    el.addEventListener('click', e => { if(e.target===el) closeModal(el.id); });
+  });
+
+  // 인증
+  onAuthStateChanged(auth, async (user) => {
+    document.getElementById('loading-screen').style.display = 'none';
+    if(!user) {
+      currentUser = null;
+      document.getElementById('login-screen').style.display = '';
+      document.getElementById('subin-app').style.display = 'none';
+      document.getElementById('coach-app').style.display = 'none';
+      return;
+    }
+    currentUser = user;
+    document.getElementById('login-screen').style.display = 'none';
+    await setupUser(user);
+  });
+
+  async function setupUser(user) {
+    const userRef = doc(db,'users',user.uid);
+    const snap = await getDoc(userRef);
+    if(!snap.exists()) {
+      const isCoach = user.email === 'bucket0825@gmail.com';
+      if(isCoach) {
+        await setDoc(userRef, { role:'coach', name:'명진', email: user.email });
+        userRole = 'coach'; coachUid = user.uid; await findSubinUid();
+      } else {
+        const cid = await findCoachUid();
+        await setDoc(userRef, { role:'user', name:'수빈', email: user.email, coachUid: cid||'' });
+        userRole = 'user'; subinUid = user.uid; coachUid = cid||null;
+      }
+    } else {
+      userRole = snap.data().role;
+      if(userRole==='user') {
+        subinUid = user.uid; coachUid = snap.data().coachUid||null;
+        if(!coachUid) coachUid = await findCoachUid();
+      } else {
+        coachUid = user.uid; await findSubinUid();
+      }
+    }
+    if(userRole==='coach') {
+      document.getElementById('coach-app').style.display = '';
+      document.getElementById('subin-app').style.display = 'none';
+      subinUid ? startCoachListeners() : renderCoachNoSubin();
+    } else {
+      document.getElementById('subin-app').style.display = '';
+      document.getElementById('coach-app').style.display = 'none';
+      document.getElementById('settings-email').textContent = user.email;
+      document.getElementById('today-date').textContent = formatDateKo(TODAY);
+      initCalendar(); startSubinListeners();
+    }
+  }
+
+  async function findCoachUid() {
+    const s = await getDocs(query(collection(db,'users'), where('role','==','coach')));
+    return s.empty ? null : s.docs[0].id;
+  }
+  async function findSubinUid() {
+    const s = await getDocs(query(collection(db,'users'), where('role','==','user')));
+    if(!s.empty) { subinUid = s.docs[0].id; return subinUid; }
+    return null;
+  }
+
+  function startSubinListeners() {
+    unsubGoals?.();
+    const gq = query(collection(db,'goals'), where('uid','==',subinUid), orderBy('priority','asc'));
+    unsubGoals = onSnapshot(gq, s => {
+      goals = s.docs.map(d => ({id:d.id,...d.data()}));
+      renderGoals(); checkReleaseBtn();
+    });
+    unsubLogs?.();
+    const mo = `${TODAY.getFullYear()}-${String(TODAY.getMonth()+1).padStart(2,'0')}`;
+    const lq = query(collection(db,'logs'), where('uid','==',subinUid), where('date','>=',mo+'-01'));
+    unsubLogs = onSnapshot(lq, s => {
+      logs = {};
+      s.docs.forEach(d => { const v=d.data(); logs[v.goalId+'_'+v.date]={count:v.count,docId:d.id}; });
+      renderGoals(); checkReleaseBtn();
+      if(activeTab==='calendar') renderCalendar();
+    });
+  }
+
+  function startCoachListeners() {
+    if(!subinUid) return;
+    unsubGoals?.();
+    const gq = query(collection(db,'goals'), where('uid','==',subinUid), orderBy('priority','asc'));
+    unsubGoals = onSnapshot(gq, s => {
+      goals = s.docs.map(d => ({id:d.id,...d.data()}));
+      renderCoachStatus();
+      if(activeCoachTab==='goals') renderCoachGoals();
+    });
+    unsubLogs?.();
+    const mo = `${TODAY.getFullYear()}-${String(TODAY.getMonth()+1).padStart(2,'0')}`;
+    const lq = query(collection(db,'logs'), where('uid','==',subinUid), where('date','>=',mo+'-01'));
+    unsubLogs = onSnapshot(lq, s => {
+      logs = {};
+      s.docs.forEach(d => { const v=d.data(); logs[v.goalId+'_'+v.date]={count:v.count,docId:d.id}; });
+      renderCoachStatus();
+      if(activeCoachTab==='calendar') renderCalendar();
+    });
+    unsubNotifs?.();
+    const nq = query(collection(db,'notifications'), where('toUid','==',coachUid), where('read','==',false));
+    unsubNotifs = onSnapshot(nq, s => {
+      notifications = s.docs.map(d => ({id:d.id,...d.data()}));
+      renderCoachStatus();
+    });
+  }
+
+  // ─── 수빈 목표 렌더 ───
+  function renderGoals() {
+    const wn = weekStart(TODAY), mn = monthStart(TODAY);
+    const filtered = goals.filter(g =>
+      activeFilter==='daily' ? g.type==='daily' :
+      activeFilter==='weekly' ? g.type==='weekly' :
+      activeFilter==='monthly' ? g.type==='monthly' :
+      g.type==='once' && !g.endDate
+    );
+    const pinned = filtered.filter(g => g.assignedBy==='coach');
+    const normal = filtered.filter(g => g.assignedBy!=='coach');
+    const ps = document.getElementById('pinned-section');
+    const ls = document.getElementById('goals-list');
+    ps.innerHTML = ''; ls.innerHTML = '';
+    if(pinned.length) {
+      ps.innerHTML = '<div class="section-header">⚑ 명진 지정</div>';
+      pinned.forEach(g => ps.appendChild(makeGoalCard(g,wn,mn)));
+    }
+    if(normal.length) {
+      if(pinned.length) ls.innerHTML = '<div class="section-header">내 목표</div>';
+      normal.forEach(g => ls.appendChild(makeGoalCard(g,wn,mn)));
+    }
+    if(!filtered.length) ls.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🌱</div>아직 목표가 없어요<br><small style="font-size:13px;color:var(--ink-soft)">+ 버튼으로 추가해 보세요</small></div>`;
+  }
+
+  function countForGoal(g, wn, mn) {
+    const key = g.id+'_'+TODAY_STR;
+    if(g.type==='daily') return logs[key]?.count||0;
+    if(g.type==='once') return g.endDate ? 1 : 0;
+    let sum = 0;
+    Object.keys(logs).forEach(k => {
+      if(!k.startsWith(g.id+'_')) return;
+      const d = k.slice(g.id.length+1);
+      if(g.type==='weekly' && d>=wn && d<=TODAY_STR) sum += logs[k].count;
+      if(g.type==='monthly' && d>=mn && d<=TODAY_STR) sum += logs[k].count;
+    });
+    return sum;
+  }
+
+  function makeGoalCard(g, wn, mn) {
+    const div = document.createElement('div');
+    const count = countForGoal(g, wn, mn);
+    const done = count >= g.targetCount;
+    div.className = 'goal-card' + (done?' done':'');
+    div.innerHTML = `
+      <div class="goal-header">
+        <span class="goal-tag tag-${g.category}">${g.category}</span>
+        <span class="goal-title">${g.title}${g.assignedBy==='coach'?' ⚑':''}</span>
+      </div>
+      ${g.type!=='once' ? `<div class="progress-row">
+        <div class="progress-dots">${Array.from({length:Math.min(g.targetCount,20)},(_,i)=>`<div class="dot${i<count?' filled':''}"></div>`).join('')}</div>
+        <span class="progress-text">${count}/${g.targetCount}${g.unit}</span>
+      </div>` : `<div style="font-size:13px;color:var(--ink-soft);margin-bottom:8px">${g.endDate?'✅ 완료됨':'진행 중'}</div>`}`;
+    if(g.type==='once') {
+      if(!g.endDate) {
+        const btn = document.createElement('button');
+        btn.className = 'btn-check'; btn.textContent = '완료했어요 ✓';
+        btn.onclick = () => completeOnce(g); div.appendChild(btn);
+      }
+    } else {
+      const btn = document.createElement('button');
+      if(!done) {
+        btn.className = 'btn-check';
+        btn.textContent = `+ 1번 했어 (${count+1}/${g.targetCount}${g.unit})`;
+        btn.onclick = () => checkGoal(g, count);
+      } else {
+        btn.className = 'btn-check success'; btn.textContent = '✓ 완료!';
+        btn.onclick = () => undoCheck(g, count);
+      }
+      div.appendChild(btn);
+    }
+    div.addEventListener('contextmenu', e => { e.preventDefault(); openEditGoal(g); });
+    let lt; div.addEventListener('touchstart', () => { lt=setTimeout(()=>openEditGoal(g),600); });
+    div.addEventListener('touchend', () => clearTimeout(lt));
+    return div;
+  }
+
+  async function checkGoal(g, cur) {
+    const key = g.id+'_'+TODAY_STR, nc = cur+1;
+    if(logs[key]) await updateDoc(doc(db,'logs',logs[key].docId), {count:nc,updatedAt:serverTimestamp()});
+    else await addDoc(collection(db,'logs'), {goalId:g.id,uid:subinUid,date:TODAY_STR,count:nc,updatedAt:serverTimestamp()});
+  }
+  async function undoCheck(g, cur) {
+    const key = g.id+'_'+TODAY_STR, nc = Math.max(0,cur-1);
+    if(logs[key]) {
+      if(nc===0) await deleteDoc(doc(db,'logs',logs[key].docId));
+      else await updateDoc(doc(db,'logs',logs[key].docId), {count:nc,updatedAt:serverTimestamp()});
+    }
+  }
+  async function completeOnce(g) {
+    const memo = prompt('완료 메모 (선택)') || '';
+    await updateDoc(doc(db,'goals',g.id), {endDate:TODAY_STR,reflection:memo,updatedAt:serverTimestamp()});
+    showToast('완료됐어요 🎉');
+  }
+  function openEditGoal(g) {
+    editingGoalId = g.id;
+    document.getElementById('modal-goal-title').textContent = '목표 수정';
+    document.getElementById('input-title').value = g.title;
+    document.getElementById('input-type').value = g.type;
+    document.getElementById('input-count').value = g.targetCount;
+    document.getElementById('input-unit').value = g.unit||'번';
+    document.getElementById('btn-delete-goal').style.display = '';
+    selectTag(g.category); onTypeChange(); openModal('modal-goal');
+  }
+
+  function checkReleaseBtn() {
+    const wrap = document.getElementById('release-btn-wrap');
+    const daily = goals.filter(g => g.type==='daily');
+    if(!daily.length) { wrap.innerHTML=''; return; }
+    const allDone = daily.every(g => (logs[g.id+'_'+TODAY_STR]?.count||0) >= g.targetCount);
+    wrap.innerHTML = allDone ? `<button class="btn-release" onclick="requestRelease()">🎉 스크린 타임 해제 요청</button>` : '';
+  }
+
+  // ─── 코치 렌더 ───
+  function renderCoachStatus() {
+    if(!subinUid) return;
+    const daily = goals.filter(g => g.type==='daily');
+    const done = daily.filter(g => (logs[g.id+'_'+TODAY_STR]?.count||0) >= g.targetCount).length;
+    const total = daily.length;
+    document.getElementById('coach-rate').textContent = total ? Math.round(done/total*100)+'%' : '0%';
+    document.getElementById('coach-done').textContent = `${done}/${total}`;
+    const na = document.getElementById('release-notif-area');
+    na.innerHTML = '';
+    notifications.forEach(n => {
+      const d = document.createElement('div'); d.className = 'release-notif';
+      d.innerHTML = `<div class="release-notif-icon">🔔</div>
+        <div class="release-notif-text">
+          <div class="release-notif-title">스크린 타임 해제 요청</div>
+          <div class="release-notif-sub">${n.message}</div>
+        </div>
+        <button class="btn-release-confirm" onclick="confirmRelease('${n.id}')">해제 완료</button>`;
+      na.appendChild(d);
+    });
+    const sd = document.getElementById('coach-goals-status');
+    sd.innerHTML = '';
+    if(!daily.length) { sd.innerHTML='<div class="empty-state"><div class="empty-state-icon">🌱</div>수빈의 목표가 없어요</div>'; return; }
+    daily.forEach(g => {
+      const count = logs[g.id+'_'+TODAY_STR]?.count||0;
+      const pct = Math.min(100, Math.round(count/g.targetCount*100));
+      const d = document.createElement('div'); d.className = 'stat-card';
+      d.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <span style="font-weight:600;font-size:15px">${g.title}</span>
+        <span style="font-size:13px;color:var(--ink-soft)">${count}/${g.targetCount}${g.unit}</span>
+      </div><div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:${pct}%"></div></div>`;
+      sd.appendChild(d);
+    });
+  }
+
+  function renderCoachGoals() {
+    const list = document.getElementById('coach-goals-list');
+    list.innerHTML = '';
+    if(!goals.length) { list.innerHTML='<div class="empty-state"><div class="empty-state-icon">🌱</div>목표가 없어요</div>'; return; }
+    goals.forEach(g => {
+      const d = document.createElement('div'); d.className = 'goal-card';
+      const tl = {daily:'매일',weekly:'주간',monthly:'월간',once:'단발'}[g.type];
+      d.innerHTML = `<div class="goal-header">
+        <span class="goal-tag tag-${g.category}">${g.category}</span>
+        <span class="goal-title">${g.title}</span>
+        <span style="font-size:12px;color:var(--ink-soft)">${tl}</span>
+      </div>
+      <button class="btn-check secondary" style="font-size:13px;padding:8px" onclick="openEditGoalCoach('${g.id}')">수정</button>`;
+      list.appendChild(d);
+    });
+  }
+
+  function renderCoachNoSubin() {
+    document.getElementById('coach-status').innerHTML = '<div class="empty-state"><div class="empty-state-icon">🔗</div>수빈 계정이 아직 연결되지 않았어요<br><small>수빈이 앱에 로그인하면 자동으로 연결돼요</small></div>';
+  }
+
+  // ─── 캘린더 ───
+  function initCalendar() { calYear=TODAY.getFullYear(); calMonth=TODAY.getMonth(); }
+
+  function renderCalendar() {
+    const isCoach = userRole==='coach';
+    const gridId = isCoach ? 'coach-cal-grid' : 'cal-grid';
+    const labelId = isCoach ? 'coach-cal-day-labels' : 'cal-day-labels';
+    const monthId = isCoach ? 'coach-cal-month-label' : 'cal-month-label';
+    if(!calYear) initCalendar();
+    const grid = document.getElementById(gridId);
+    const labels = document.getElementById(labelId);
+    if(!grid) return;
+    document.getElementById(monthId).textContent = `${calYear}년 ${calMonth+1}월`;
+    labels.innerHTML = '일월화수목금토'.split('').map(d=>`<div class="cal-day-label">${d}</div>`).join('');
+    const first = new Date(calYear, calMonth, 1);
+    const last = new Date(calYear, calMonth+1, 0);
+    grid.innerHTML = '';
+    for(let i=0;i<first.getDay();i++) { const d=document.createElement('div'); d.className='cal-cell empty'; grid.appendChild(d); }
+    for(let d=1;d<=last.getDate();d++) {
+      const ds = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const cell = document.createElement('div');
+      cell.className = 'cal-cell' + (ds===TODAY_STR?' today':'');
+      const dayGoals = goals.filter(g => g.type==='daily');
+      const dots = dayGoals.slice(0,5).map(g => {
+        const c = logs[g.id+'_'+ds]?.count||0;
+        return `<div class="cal-dot ${c>=g.targetCount?'green':c>0?'orange':'gray'}"></div>`;
+      }).join('');
+      cell.innerHTML = `<div class="cal-date">${d}</div><div class="cal-dots">${dots}</div>`;
+      cell.onclick = () => showDayDetail(ds);
+      grid.appendChild(cell);
+    }
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(()=>t.classList.remove('show'), 2200);
+  }
+  window.showToast = showToast;
+</script>
+</body>
+</html>
