@@ -760,7 +760,7 @@
     unsubGoals = onSnapshot(gq, s => {
       goals = s.docs.map(d => ({id:d.id,...d.data()}));
       renderGoals(); checkReleaseBtn();
-    });
+    }, err => showToast('목표 불러오기 실패: ' + err.message));
     unsubLogs?.();
     const mo = `${TODAY.getFullYear()}-${String(TODAY.getMonth()+1).padStart(2,'0')}`;
     const lq = query(collection(db,'logs'), where('uid','==',subinUid), where('date','>=',mo+'-01'));
@@ -769,7 +769,7 @@
       s.docs.forEach(d => { const v=d.data(); logs[v.goalId+'_'+v.date]={count:v.count,docId:d.id}; });
       renderGoals(); checkReleaseBtn();
       if(activeTab==='calendar') renderCalendar();
-    });
+    }, err => showToast('기록 불러오기 실패: ' + err.message));
   }
 
   function startCoachListeners() {
@@ -780,7 +780,7 @@
       goals = s.docs.map(d => ({id:d.id,...d.data()}));
       renderCoachStatus();
       if(activeCoachTab==='goals') renderCoachGoals();
-    });
+    }, err => showToast('목표 불러오기 실패: ' + err.message));
     unsubLogs?.();
     const mo = `${TODAY.getFullYear()}-${String(TODAY.getMonth()+1).padStart(2,'0')}`;
     const lq = query(collection(db,'logs'), where('uid','==',subinUid), where('date','>=',mo+'-01'));
@@ -789,13 +789,13 @@
       s.docs.forEach(d => { const v=d.data(); logs[v.goalId+'_'+v.date]={count:v.count,docId:d.id}; });
       renderCoachStatus();
       if(activeCoachTab==='calendar') renderCalendar();
-    });
+    }, err => showToast('기록 불러오기 실패: ' + err.message));
     unsubNotifs?.();
     const nq = query(collection(db,'notifications'), where('toUid','==',coachUid), where('read','==',false));
     unsubNotifs = onSnapshot(nq, s => {
       notifications = s.docs.map(d => ({id:d.id,...d.data()}));
       renderCoachStatus();
-    });
+    }, err => showToast('알림 불러오기 실패: ' + err.message));
   }
 
   // ─── 수빈 목표 렌더 ───
