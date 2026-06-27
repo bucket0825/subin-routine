@@ -399,7 +399,7 @@
         </div>
         <div class="settings-item" onclick="migrateLocalData()" style="cursor:pointer">
           <span class="settings-label">기존 데이터 가져오기</span>
-          <span class="settings-value">로컬 → Firebase</span>
+          <span class="settings-value">로컬 → Google Drive</span>
         </div>
       </div>
       <div class="settings-section">
@@ -534,29 +534,19 @@
 
 <div id="toast"></div>
 
+<script src="https://accounts.google.com/gsi/client"></script>
 <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut as fbSignOut }
-    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-  import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc,
-    onSnapshot, query, where, orderBy, addDoc, updateDoc, serverTimestamp }
-    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+  const GOOGLE_CLIENT_ID = 'PASTE_YOUR_OAUTH_CLIENT_ID_HERE.apps.googleusercontent.com';
+  const DRIVE_FOLDER_ID = '1YNV90d1y-Giwhgu_EqnkNV8geYHrSS6y';
+  const DATA_FILENAME = 'subin-routine-data.json';
+  const DRIVE_SCOPE = 'openid email profile https://www.googleapis.com/auth/drive';
+  const POLL_INTERVAL_MS = 20000;
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyBfyRE7CNENjgSfe25xHAdr87gOllpYtvM",
-    authDomain: "subin-routine.firebaseapp.com",
-    projectId: "subin-routine",
-    storageBucket: "subin-routine.firebasestorage.app",
-    messagingSenderId: "102755018689",
-    appId: "1:102755018689:web:2927e3b73fb5391db17140"
-  };
+  let accessToken = null, tokenClient = null, driveFileId = null, pollTimer = null;
+  const newId = () => crypto.randomUUID();
+  const nowIso = () => new Date().toISOString();
 
-  const app = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
-  const db = getFirestore(app);
-  const provider = new GoogleAuthProvider();
-
-  let currentUser = null, userRole = null, subinUid = null, coachUid = null;
+  let currentUser = null, userRole = null, subinEmail = null, coachEmail = null;
   let goals = [], logs = {}, notifications = [];
   let activeFilter = 'daily', activeTab = 'today', activeCoachTab = 'status';
   let calYear, calMonth, editingGoalId = null, selectedTag = '개인';
@@ -618,11 +608,13 @@
       const json = await res.json();
       const text = json.content && json.content[0] && json.content[0].text;
       if(!text) { el.remove(); return; }
-      await updateDoc(doc(db,'goals',goal.id), { aiSuggest: text });
+      await mutateData(data => {
+        const g = data.goals.find(x => x.id === goal.id);
+        if(g) g.aiSuggest = text;
+      });
       el.innerHTML = `<div class="ai-suggest-label">💬 이렇게 시작해볼까?</div><div class="ai-suggest-text">${escHtml(text)}</div>`;
     } catch(e) { if(el) el.remove(); }
   }
-  let unsubGoals, unsubLogs, unsubNotifs;
 
   const TODAY = new Date();
   const TODAY_STR = fmt(TODAY);
@@ -642,14 +634,186 @@
     return `${d.getMonth()+1}월 ${d.getDate()}일 (${'일월화수목금토'[d.getDay()]})`;
   }
 
+  // ─── Google Drive 데이터 레이어 ───
+  async function driveFetch(url, opts = {}) {
+    opts.headers = Object.assign({}, opts.headers, { Authorization: 'Bearer ' + accessToken });
+    let res = await fetch(url, opts);
+    if(res.status === 401) {
+      await new Promise(resolve => {
+        tokenClient.callback = (resp) => { if(!resp.error) accessToken = resp.access_token; resolve(); };
+        tokenClient.requestAccessToken({ prompt: '' });
+      });
+      tokenClient.callback = onTokenResponse;
+      opts.headers.Authorization = 'Bearer ' + accessToken;
+      res = await fetch(url, opts);
+    }
+    return res;
+  }
+
+  async function ensureDataFile() {
+    if(driveFileId) return driveFileId;
+    const q = encodeURIComponent(`name='${DATA_FILENAME}' and '${DRIVE_FOLDER_ID}' in parents and trashed=false`);
+    const res = await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`);
+    const json = await res.json();
+    if(json.files && json.files.length) { driveFileId = json.files[0].id; return driveFileId; }
+    const initial = { users: {}, goals: [], logs: [], notifications: [] };
+    const metadata = { name: DATA_FILENAME, parents: [DRIVE_FOLDER_ID], mimeType: 'application/json' };
+    const form = new FormData();
+    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+    form.append('file', new Blob([JSON.stringify(initial)], { type: 'application/json' }));
+    const cres = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
+      method: 'POST', headers: { Authorization: 'Bearer ' + accessToken }, body: form
+    });
+    const cjson = await cres.json();
+    driveFileId = cjson.id;
+    return driveFileId;
+  }
+
+  async function readDataFile() {
+    const id = await ensureDataFile();
+    const res = await driveFetch(`https://www.googleapis.com/drive/v3/files/${id}?alt=media`);
+    return await res.json();
+  }
+
+  async function writeDataFile(data) {
+    const id = await ensureDataFile();
+    await driveFetch(`https://www.googleapis.com/upload/drive/v3/files/${id}?uploadType=media`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
+    });
+  }
+
+  async function mutateData(mutatorFn) {
+    const data = await readDataFile();
+    mutatorFn(data);
+    await writeDataFile(data);
+    applyData(data);
+  }
+
+  function applyData(data) {
+    goals = data.goals.filter(g => g.uid === subinEmail).sort((a,b) => (a.priority||0)-(b.priority||0));
+    logs = {};
+    data.logs.filter(l => l.uid === subinEmail).forEach(l => { logs[l.goalId+'_'+l.date] = { count: l.count, id: l.id }; });
+    notifications = userRole === 'coach' ? data.notifications.filter(n => n.toUid === coachEmail && !n.read) : [];
+    renderAll();
+  }
+
+  function renderAll() {
+    if(userRole === 'coach') {
+      renderCoachStatus();
+      if(activeCoachTab === 'goals') renderCoachGoals();
+      if(activeCoachTab === 'calendar') renderCalendar();
+    } else {
+      renderGoals();
+      checkReleaseBtn();
+      if(activeTab === 'calendar') renderCalendar();
+    }
+  }
+
+  function startPolling() {
+    stopPolling();
+    pollTimer = setInterval(async () => {
+      try { applyData(await readDataFile()); } catch(e) {}
+    }, POLL_INTERVAL_MS);
+  }
+  function stopPolling() { clearInterval(pollTimer); pollTimer = null; }
+
+  // ─── 인증 (Google Identity Services) ───
+  function waitForGis(cb) {
+    if(window.google && google.accounts && google.accounts.oauth2) cb();
+    else setTimeout(() => waitForGis(cb), 100);
+  }
+
+  async function fetchUserInfo() {
+    const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: 'Bearer ' + accessToken } });
+    if(!res.ok) throw new Error('사용자 정보를 가져오지 못했어요');
+    return await res.json();
+  }
+
+  function scheduleTokenRefresh(expiresInSec) {
+    clearTimeout(window._tokenRefreshTimer);
+    window._tokenRefreshTimer = setTimeout(() => {
+      tokenClient.requestAccessToken({ prompt: '' });
+    }, Math.max((expiresInSec - 120) * 1000, 10000));
+  }
+
+  async function onTokenResponse(resp) {
+    if(resp.error) {
+      document.getElementById('loading-screen').style.display = 'none';
+      document.getElementById('login-screen').style.display = '';
+      return;
+    }
+    accessToken = resp.access_token;
+    scheduleTokenRefresh(resp.expires_in);
+    try {
+      const info = await fetchUserInfo();
+      currentUser = info;
+      document.getElementById('loading-screen').style.display = 'none';
+      document.getElementById('login-screen').style.display = 'none';
+      await setupUser(info);
+    } catch(e) {
+      showToast('로그인 처리 중 오류: ' + e.message);
+      document.getElementById('loading-screen').style.display = 'none';
+      document.getElementById('login-screen').style.display = '';
+    }
+  }
+
+  async function setupUser(user) {
+    const email = user.email;
+    let data;
+    try { data = await readDataFile(); }
+    catch(e) { showToast('데이터를 불러오지 못했어요: ' + e.message); return; }
+    const isCoach = email === 'bucket0825@gmail.com';
+    if(!data.users[email]) {
+      data.users[email] = { role: isCoach ? 'coach' : 'user', name: isCoach ? '명진' : (user.name || '수빈'), email };
+      await writeDataFile(data);
+    }
+    userRole = data.users[email].role;
+    const allUsers = Object.values(data.users);
+    if(userRole === 'user') {
+      subinEmail = email;
+      coachEmail = allUsers.find(u => u.role === 'coach')?.email || null;
+    } else {
+      coachEmail = email;
+      subinEmail = allUsers.find(u => u.role === 'user')?.email || null;
+    }
+    applyData(data);
+    if(userRole === 'coach') {
+      document.getElementById('coach-app').style.display = '';
+      document.getElementById('subin-app').style.display = 'none';
+      if(!subinEmail) renderCoachNoSubin();
+    } else {
+      document.getElementById('subin-app').style.display = '';
+      document.getElementById('coach-app').style.display = 'none';
+      document.getElementById('settings-email').textContent = email;
+      document.getElementById('today-date').textContent = formatDateKo(TODAY);
+      initCalendar();
+    }
+    startPolling();
+  }
+
+  waitForGis(() => {
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID,
+      scope: DRIVE_SCOPE,
+      callback: onTokenResponse,
+      error_callback: () => {
+        document.getElementById('loading-screen').style.display = 'none';
+        document.getElementById('login-screen').style.display = '';
+      }
+    });
+    tokenClient.requestAccessToken({ prompt: '' });
+  });
+
   // 전역 함수 노출
-  window.signInWithGoogle = async () => {
-    try { await signInWithPopup(auth, provider); }
-    catch(e) { showToast('로그인 실패: ' + e.message); }
-  };
-  window.signOut = async () => {
-    [unsubGoals, unsubLogs, unsubNotifs].forEach(u => u?.());
-    await fbSignOut(auth);
+  window.signInWithGoogle = () => tokenClient.requestAccessToken({ prompt: 'consent' });
+  window.signOut = () => {
+    stopPolling();
+    const tok = accessToken;
+    accessToken = null; currentUser = null; userRole = null; subinEmail = null; coachEmail = null; driveFileId = null;
+    document.getElementById('subin-app').style.display = 'none';
+    document.getElementById('coach-app').style.display = 'none';
+    document.getElementById('login-screen').style.display = '';
+    if(tok) google.accounts.oauth2.revoke(tok, () => {});
   };
   window.switchTab = (tab) => {
     activeTab = tab;
@@ -707,23 +871,28 @@
     const type = document.getElementById('input-type').value;
     const targetCount = type==='once' ? 1 : parseInt(document.getElementById('input-count').value)||1;
     const unit = type==='once' ? '' : (document.getElementById('input-unit').value.trim()||'번');
-    const data = { uid: subinUid, title, category: selectedTag, type, targetCount, unit,
-      assignedBy: (userRole==='coach') ? 'coach' : 'self',
-      startDate: TODAY_STR, endDate: null, reflection: '', aiSuggest: '', updatedAt: serverTimestamp() };
     try {
-      if(editingGoalId) {
-        await updateDoc(doc(db,'goals',editingGoalId), data);
-      } else {
-        data.priority = goals.length; data.createdAt = serverTimestamp();
-        await addDoc(collection(db,'goals'), data);
-      }
+      await mutateData(data => {
+        if(editingGoalId) {
+          const g = data.goals.find(x => x.id === editingGoalId);
+          if(g) Object.assign(g, { title, category: selectedTag, type, targetCount, unit, updatedAt: nowIso() });
+        } else {
+          data.goals.push({
+            id: newId(), uid: subinEmail, title, category: selectedTag, type, targetCount, unit,
+            assignedBy: (userRole==='coach') ? 'coach' : 'self',
+            startDate: TODAY_STR, endDate: null, reflection: '', aiSuggest: '',
+            priority: data.goals.filter(x => x.uid === subinEmail).length,
+            createdAt: nowIso(), updatedAt: nowIso()
+          });
+        }
+      });
       closeModal('modal-goal');
       showToast(editingGoalId ? '수정됐어요' : '목표가 추가됐어요 🌿');
     } catch(e) { showToast('오류: '+e.message); }
   };
   window.deleteGoal = async () => {
     if(!editingGoalId || !confirm('이 목표를 삭제할까요?')) return;
-    await deleteDoc(doc(db,'goals',editingGoalId));
+    await mutateData(data => { data.goals = data.goals.filter(g => g.id !== editingGoalId); });
     closeModal('modal-goal'); showToast('삭제됐어요');
   };
   window.showUserMenu = () => {
@@ -743,30 +912,37 @@
     try {
       const old = JSON.parse(raw);
       const list = Array.isArray(old) ? old : (old.goals || []);
-      if(!confirm(`기존 목표 ${list.length}개를 Firebase로 가져올까요?`)) return;
-      for(const g of list) {
-        await addDoc(collection(db,'goals'), {
-          uid: subinUid, title: g.title||g.name||'', category: g.category||'개인',
-          type: 'once', targetCount: 1, unit: '', priority: g.order||0,
-          assignedBy: 'self', startDate: g.startDate||TODAY_STR,
-          endDate: g.endDate||null, reflection: g.reflection||'',
-          aiSuggest: '', createdAt: serverTimestamp(), updatedAt: serverTimestamp()
+      if(!confirm(`기존 목표 ${list.length}개를 Google Drive로 가져올까요?`)) return;
+      await mutateData(data => {
+        list.forEach(g => {
+          data.goals.push({
+            id: newId(), uid: subinEmail, title: g.title||g.name||'', category: g.category||'개인',
+            type: 'once', targetCount: 1, unit: '', priority: g.order||0,
+            assignedBy: 'self', startDate: g.startDate||TODAY_STR,
+            endDate: g.endDate||null, reflection: g.reflection||'',
+            aiSuggest: '', createdAt: nowIso(), updatedAt: nowIso()
+          });
         });
-      }
+      });
       showToast(`${list.length}개 가져오기 완료!`);
     } catch(e) { showToast('오류: '+e.message); }
   };
   window.requestRelease = async () => {
-    if(!coachUid) { showToast('코치가 연결되지 않았어요'); return; }
-    await addDoc(collection(db,'notifications'), {
-      type: 'release_request', fromUid: subinUid, toUid: coachUid,
-      message: `수빈이 오늘 목표를 모두 완료했어요! (${formatDateKo(TODAY)})`,
-      read: false, createdAt: serverTimestamp()
+    if(!coachEmail) { showToast('코치가 연결되지 않았어요'); return; }
+    await mutateData(data => {
+      data.notifications.push({
+        id: newId(), type: 'release_request', fromUid: subinEmail, toUid: coachEmail,
+        message: `수빈이 오늘 목표를 모두 완료했어요! (${formatDateKo(TODAY)})`,
+        read: false, createdAt: nowIso()
+      });
     });
     showToast('명진에게 해제 요청을 보냈어요 📩');
   };
   window.confirmRelease = async (notifId) => {
-    await updateDoc(doc(db,'notifications',notifId), { read: true });
+    await mutateData(data => {
+      const n = data.notifications.find(x => x.id === notifId);
+      if(n) n.read = true;
+    });
     showToast('해제 완료 처리됐어요 ✓');
   };
   window.openEditGoalCoach = (id) => { const g = goals.find(x=>x.id===id); if(g) openEditGoal(g); };
@@ -791,110 +967,6 @@
   document.querySelectorAll('.modal-overlay').forEach(el => {
     el.addEventListener('click', e => { if(e.target===el) closeModal(el.id); });
   });
-
-  // 인증
-  onAuthStateChanged(auth, async (user) => {
-    document.getElementById('loading-screen').style.display = 'none';
-    if(!user) {
-      currentUser = null;
-      document.getElementById('login-screen').style.display = '';
-      document.getElementById('subin-app').style.display = 'none';
-      document.getElementById('coach-app').style.display = 'none';
-      return;
-    }
-    currentUser = user;
-    document.getElementById('login-screen').style.display = 'none';
-    await setupUser(user);
-  });
-
-  async function setupUser(user) {
-    const userRef = doc(db,'users',user.uid);
-    const snap = await getDoc(userRef);
-    if(!snap.exists()) {
-      const isCoach = user.email === 'bucket0825@gmail.com';
-      if(isCoach) {
-        await setDoc(userRef, { role:'coach', name:'명진', email: user.email });
-        userRole = 'coach'; coachUid = user.uid; await findSubinUid();
-      } else {
-        const cid = await findCoachUid();
-        await setDoc(userRef, { role:'user', name:'수빈', email: user.email, coachUid: cid||'' });
-        userRole = 'user'; subinUid = user.uid; coachUid = cid||null;
-      }
-    } else {
-      userRole = snap.data().role;
-      if(userRole==='user') {
-        subinUid = user.uid; coachUid = snap.data().coachUid||null;
-        if(!coachUid) coachUid = await findCoachUid();
-      } else {
-        coachUid = user.uid; await findSubinUid();
-      }
-    }
-    if(userRole==='coach') {
-      document.getElementById('coach-app').style.display = '';
-      document.getElementById('subin-app').style.display = 'none';
-      subinUid ? startCoachListeners() : renderCoachNoSubin();
-    } else {
-      document.getElementById('subin-app').style.display = '';
-      document.getElementById('coach-app').style.display = 'none';
-      document.getElementById('settings-email').textContent = user.email;
-      document.getElementById('today-date').textContent = formatDateKo(TODAY);
-      initCalendar(); startSubinListeners();
-    }
-  }
-
-  async function findCoachUid() {
-    const s = await getDocs(query(collection(db,'users'), where('role','==','coach')));
-    return s.empty ? null : s.docs[0].id;
-  }
-  async function findSubinUid() {
-    const s = await getDocs(query(collection(db,'users'), where('role','==','user')));
-    if(!s.empty) { subinUid = s.docs[0].id; return subinUid; }
-    return null;
-  }
-
-  function startSubinListeners() {
-    unsubGoals?.();
-    const gq = query(collection(db,'goals'), where('uid','==',subinUid), orderBy('priority','asc'));
-    unsubGoals = onSnapshot(gq, s => {
-      goals = s.docs.map(d => ({id:d.id,...d.data()}));
-      renderGoals(); checkReleaseBtn();
-    }, err => showToast('목표 불러오기 실패: ' + err.message));
-    unsubLogs?.();
-    const mo = `${TODAY.getFullYear()}-${String(TODAY.getMonth()+1).padStart(2,'0')}`;
-    const lq = query(collection(db,'logs'), where('uid','==',subinUid), where('date','>=',mo+'-01'));
-    unsubLogs = onSnapshot(lq, s => {
-      logs = {};
-      s.docs.forEach(d => { const v=d.data(); logs[v.goalId+'_'+v.date]={count:v.count,docId:d.id}; });
-      renderGoals(); checkReleaseBtn();
-      if(activeTab==='calendar') renderCalendar();
-    }, err => showToast('기록 불러오기 실패: ' + err.message));
-  }
-
-  function startCoachListeners() {
-    if(!subinUid) return;
-    unsubGoals?.();
-    const gq = query(collection(db,'goals'), where('uid','==',subinUid), orderBy('priority','asc'));
-    unsubGoals = onSnapshot(gq, s => {
-      goals = s.docs.map(d => ({id:d.id,...d.data()}));
-      renderCoachStatus();
-      if(activeCoachTab==='goals') renderCoachGoals();
-    }, err => showToast('목표 불러오기 실패: ' + err.message));
-    unsubLogs?.();
-    const mo = `${TODAY.getFullYear()}-${String(TODAY.getMonth()+1).padStart(2,'0')}`;
-    const lq = query(collection(db,'logs'), where('uid','==',subinUid), where('date','>=',mo+'-01'));
-    unsubLogs = onSnapshot(lq, s => {
-      logs = {};
-      s.docs.forEach(d => { const v=d.data(); logs[v.goalId+'_'+v.date]={count:v.count,docId:d.id}; });
-      renderCoachStatus();
-      if(activeCoachTab==='calendar') renderCalendar();
-    }, err => showToast('기록 불러오기 실패: ' + err.message));
-    unsubNotifs?.();
-    const nq = query(collection(db,'notifications'), where('toUid','==',coachUid), where('read','==',false));
-    unsubNotifs = onSnapshot(nq, s => {
-      notifications = s.docs.map(d => ({id:d.id,...d.data()}));
-      renderCoachStatus();
-    }, err => showToast('알림 불러오기 실패: ' + err.message));
-  }
 
   // ─── 수빈 목표 렌더 ───
   function renderGoals() {
@@ -985,20 +1057,28 @@
   }
 
   async function checkGoal(g, cur) {
-    const key = g.id+'_'+TODAY_STR, nc = cur+1;
-    if(logs[key]) await updateDoc(doc(db,'logs',logs[key].docId), {count:nc,updatedAt:serverTimestamp()});
-    else await addDoc(collection(db,'logs'), {goalId:g.id,uid:subinUid,date:TODAY_STR,count:nc,updatedAt:serverTimestamp()});
+    const nc = cur+1;
+    await mutateData(data => {
+      const entry = data.logs.find(l => l.goalId===g.id && l.uid===subinEmail && l.date===TODAY_STR);
+      if(entry) { entry.count = nc; entry.updatedAt = nowIso(); }
+      else data.logs.push({ id: newId(), goalId: g.id, uid: subinEmail, date: TODAY_STR, count: nc, updatedAt: nowIso() });
+    });
   }
   async function undoCheck(g, cur) {
-    const key = g.id+'_'+TODAY_STR, nc = Math.max(0,cur-1);
-    if(logs[key]) {
-      if(nc===0) await deleteDoc(doc(db,'logs',logs[key].docId));
-      else await updateDoc(doc(db,'logs',logs[key].docId), {count:nc,updatedAt:serverTimestamp()});
-    }
+    const nc = Math.max(0,cur-1);
+    await mutateData(data => {
+      const idx = data.logs.findIndex(l => l.goalId===g.id && l.uid===subinEmail && l.date===TODAY_STR);
+      if(idx===-1) return;
+      if(nc===0) data.logs.splice(idx,1);
+      else { data.logs[idx].count = nc; data.logs[idx].updatedAt = nowIso(); }
+    });
   }
   async function completeOnce(g) {
     const memo = prompt('완료 메모 (선택)') || '';
-    await updateDoc(doc(db,'goals',g.id), {endDate:TODAY_STR,reflection:memo,updatedAt:serverTimestamp()});
+    await mutateData(data => {
+      const target = data.goals.find(x => x.id===g.id);
+      if(target) { target.endDate = TODAY_STR; target.reflection = memo; target.updatedAt = nowIso(); }
+    });
     showToast('완료됐어요 🎉');
   }
   function openEditGoal(g) {
@@ -1022,7 +1102,7 @@
 
   // ─── 코치 렌더 ───
   function renderCoachStatus() {
-    if(!subinUid) return;
+    if(!subinEmail) return;
     const daily = goals.filter(g => g.type==='daily');
     const done = daily.filter(g => (logs[g.id+'_'+TODAY_STR]?.count||0) >= g.targetCount).length;
     const total = daily.length;
